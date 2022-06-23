@@ -37,7 +37,7 @@ class UnitPage:
         req = requests.get(self.base_url)
         page = req.content
 
-        self.soup = BeautifulSoup(page, "html.parser")
+        self._soup = BeautifulSoup(page, "html.parser")
 
         self.uid = None
         self.icon = None
@@ -52,13 +52,13 @@ class UnitPage:
         self.gather_data()
 
     def to_json(self) -> Dict[str, Any]:
-        '''Returns all attributes in a json-readable format.'''
-        return {k:val for k,val in self.__dict__.items() if k != "soup"}
+        '''Returns all public attributes in a json-readable format.'''
+        return {k:val for k,val in self.__dict__.items() if not k.startswith("_")}
 
     def get_unit_id(self) -> str:
         '''Grabs the unit's id.'''
         if not self.uid:
-            id_tag = self.soup.select_one('div[class="unit_detail_number"] > span[class="number"]')
+            id_tag = self._soup.select_one('div[class="unit_detail_number"] > span[class="number"]')
             if id_tag:
                 self.uid = id_tag.text.strip().lstrip("No.")
         
@@ -67,13 +67,15 @@ class UnitPage:
     def get_unit_name(self) -> str:
         '''Grabs the unit's name.'''
         if not self.name:
-            name_tag = self.soup.select_one('div[class="unit_detail_name"] > p[class="name"]')
+            name_tag = self._soup.select_one('div[class="unit_detail_name"] > p[class="name"]')
             self.name = name_tag.text.strip()
+
+        return self.name
 
     def get_unit_series(self) -> str:
         '''Grabs what series the unit belonged to.'''
         if not self.series:
-            series_tag = self.soup.select_one('div[class="unit_detail_number"] > span[class="series"]')
+            series_tag = self._soup.select_one('div[class="unit_detail_number"] > span[class="series"]')
             self.series = series_tag.text.strip().lstrip("≪").rstrip("≫")
         
         return self.series
@@ -81,7 +83,7 @@ class UnitPage:
     def get_unit_attribute(self) -> str:
         '''Grabs the unit's attribute.'''
         if not self.attribute:
-            attr_tag = self.soup.select_one('div[class="unit_detail_name"] > div[class="zokusei"] > img[src]')
+            attr_tag = self._soup.select_one('div[class="unit_detail_name"] > div[class="zokusei"] > img[src]')
             attribute = attr_tag.get("src")[-5]
             # if attribute in UnitElements
             if UnitElements.has_value(int(attribute)):
@@ -92,7 +94,7 @@ class UnitPage:
     def get_unit_rank(self) -> int:
         '''Grabs the unit's rank.'''
         if not self.rank:
-            rank_tag = self.soup.select_one('div[class="rank"] > img[src]')
+            rank_tag = self._soup.select_one('div[class="rank"] > img[src]')
             if rank_tag:
                 self.rank = rank_tag.get("src")[-5]
 
@@ -101,7 +103,7 @@ class UnitPage:
     def get_unit_sex(self) -> str:
         '''Grabs the unit's sex.'''
         if not self.sex:
-            sex_tag = self.soup.select_one('div[class="sex"] > img[src]')
+            sex_tag = self._soup.select_one('div[class="sex"] > img[src]')
             if sex_tag:
                 self.sex = sex_tag.get("src").split("_")[-1].replace(".png", "")
 
@@ -114,15 +116,16 @@ class UnitPage:
         if (len(self.animations) == 3) or (len(self.animations) != 0):
             return self.animations
         else:
-            animation_tags = self.soup.select('div[class="unit_gif"] > img[src]')
+            animation_tags = self._soup.select('div[class="unit_gif"] > img[src]')
             self.animations = [urljoin(self.base_url, animation.get("src")) for animation in animation_tags]
             return self.animations
 
     def get_unit_text(self) -> str:
+        '''Grabs the unit's description.'''
         if self.unit_text:
             return self.unit_text
         else:
-            text_tag = self.soup.select_one('article[class="unit_text"]')
+            text_tag = self._soup.select_one('article[class="unit_text"]')
             if text_tag:
                 self.unit_text = text_tag.text
                 return text_tag.text
@@ -148,15 +151,14 @@ def main() -> None:
     time.sleep(0.5)
     resp = req.content
 
-    soup = BeautifulSoup(resp, "html.parser")
+    _soup = BeautifulSoup(resp, "html.parser")
 
-    for unit_tag in soup.select('ul[class="unit_list"] > li'):
+    for unit_tag in _soup.select('ul[class="unit_list"] > li'):
 
         uid = unit_tag.select_one('span').text.lstrip("No.")
 
         link_tag = unit_tag.select_one('a[href^="bf"]')
         details_link = urljoin(BASE_URL, link_tag.get("href"))
-        # print(uid, details_link)
 
         unit = UnitPage(details_link)
 
