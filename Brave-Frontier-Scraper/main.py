@@ -150,7 +150,7 @@ def main() -> None:
 
     soup = BeautifulSoup(resp, "html.parser")
 
-    for unit_tag in soup.select('ul[class="unit_list"] > li', limit=12):
+    for unit_tag in soup.select('ul[class="unit_list"] > li'):
 
         uid = unit_tag.select_one('span').text.lstrip("No.")
 
