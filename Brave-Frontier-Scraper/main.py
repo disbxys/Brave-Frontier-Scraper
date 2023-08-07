@@ -1,4 +1,3 @@
-import codecs
 import enum
 import json
 from pathlib import Path
@@ -14,7 +13,7 @@ from logger import get_logger
 LOG = get_logger(__name__)
 
 BASE_URL = "https://www.bravefrontier.jp/library/bf1/bf1_list.php"
-SAVE_PATH = Path("./db/bf_units/")
+SAVE_PATH = Path("./db/bf1_units/")
 if not SAVE_PATH.exists(): SAVE_PATH.mkdir(parents=True, exist_ok=True)
 
 class UnitElements(enum.Enum):
@@ -76,7 +75,8 @@ class UnitPage:
         '''Grabs what series the unit belonged to.'''
         if not self.series:
             series_tag = self._soup.select_one('div[class="unit_detail_number"] > span[class="series"]')
-            self.series = series_tag.text.strip().lstrip("≪").rstrip("≫")
+            if series_tag:  # There are some units that do not belong to a series.
+                self.series = series_tag.text.strip().lstrip("≪").rstrip("≫")
         
         return self.series
 
@@ -144,7 +144,6 @@ class UnitPage:
         self.get_unit_text()
 
 
-
 def main() -> None:
 
     req = requests.get(BASE_URL)
@@ -153,24 +152,54 @@ def main() -> None:
 
     _soup = BeautifulSoup(resp, "html.parser")
 
+    # Get all tags for each Brave Frontier unit
     for unit_tag in _soup.select('ul[class="unit_list"] > li'):
 
         uid = unit_tag.select_one('span').text.lstrip("No.")
 
+        # Create a path to store unit data
+        unit_folder = SAVE_PATH / uid
+        unit_folder.mkdir(exist_ok=True)
+
+        # Skip existing entries
+        if (unit_folder / "data.json").exists():
+            LOG.warning(f"{uid} already exists. Brave Frontier unit skipped.")
+            continue
+
+        # Get url to the unit's profile
         link_tag = unit_tag.select_one('a[href^="bf"]')
-        details_link = urljoin(BASE_URL, link_tag.get("href"))
+        link_to_profile = urljoin(BASE_URL, link_tag.get("href"))
 
-        unit = UnitPage(details_link)
+        LOG.info(f"Downloading unit {uid} profile")
+        unit = UnitPage(link_to_profile)
 
+        # Add unit icon to unit info
         unit_icon_tag = link_tag.select_one('img[src]')
         if unit_icon_tag:
             unit_icon = unit_icon_tag.get("src")
             unit.icon = unit_icon
 
-        print(unit.uid, unit.name)
-
-        with (SAVE_PATH / f"{uid}.json").open("w+", encoding="utf-8") as outfile:
+        # Dump unit profile into folder
+        with (unit_folder / "data.json").open("w+", encoding="utf-8") as outfile:
             outfile.write(json.dumps(unit.to_json(), indent=4, ensure_ascii=False))
+
+        # Location for unit animations and images
+        unit_asset_folder = unit_folder / "assets"
+        unit_asset_folder.mkdir(exist_ok=True)
+
+        # Download the unit's animations and profile icon
+        LOG.info(f"Downloading unit {uid} assets.")
+        url_list = [url for url in [unit.icon]+unit.animations if url is not None]
+        for url in url_list:
+            img_req = requests.get(url)
+            asset_filename = Path(url).name
+
+            LOG.debug(f"Downloading <{asset_filename}> to: <{unit_asset_folder}>")
+
+            with (unit_asset_folder / asset_filename).open("wb+") as outfile:
+                outfile.write(img_req.content)
+
+        LOG.info(f"Successfully donwloaded unit {unit.uid} information.")
         # print(json.dumps(unit.to_json(), indent=4, ensure_ascii=False))
 
     pass
